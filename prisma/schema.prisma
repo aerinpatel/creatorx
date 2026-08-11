@@ -51,9 +51,9 @@ model Creator {
   user             User      @relation(fields: [userId], references: [id])
   channelName      String
   youtubeChannelId String    @unique
-  totalShares      BigInt
-  floatShares      BigInt // shares offered to the public at IPO
-  ownerShares      BigInt // shares retained by the creator
+  totalShares      BigInt    @default(0)
+  floatShares      BigInt    @default(0) // shares offered to the public at IPO
+  ownerShares      BigInt    @default(0) // shares retained by the creator
   ipoStatus        IpoStatus @default(PENDING)
   ipoPrice         Decimal?  @db.Decimal(10, 2)
   listedAt         DateTime?

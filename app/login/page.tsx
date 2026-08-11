@@ -13,13 +13,17 @@ import {
   Mail,
   UserCheck,
   Video,
-  LineChart
+  LineChart,
+  AtSign,
+  User
 } from 'lucide-react';
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [channelHandle, setChannelHandle] = useState('');
+  const [name, setName] = useState('');
   const [role, setRole] = useState<'INVESTOR' | 'CREATOR'>('INVESTOR');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,7 +38,9 @@ export default function Login() {
     const endpoint = isLogin ? '/api/auth/signin' : '/api/auth/signup';
     const payload = isLogin 
       ? { email, password } 
-      : { email, password, role };
+      : role === 'CREATOR'
+        ? { email, password, role, channelHandle, name }
+        : { email, password, role };
 
     try {
       const res = await fetch(endpoint, {
@@ -59,14 +65,13 @@ export default function Login() {
       if (meRes.ok) {
         const userData = await meRes.json();
         if (userData.role === 'CREATOR') {
-          router.push('/creator-studio');
+          router.push('/creator-options');
         } else {
           router.push('/market');
         }
       } else {
-        router.push('/market');
+        router.push(role === 'CREATOR' ? '/creator-options' : '/market');
       }
-      
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -228,6 +233,50 @@ export default function Login() {
                 </div>
               )}
 
+              {/* Creator-Specific Fields on Signup */}
+              {!isLogin && role === 'CREATOR' && (
+                <>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
+                        YouTube Channel Handle
+                      </label>
+                      <span className="text-[10px] font-mono text-indigo-400">Auto-links Channel ID</span>
+                    </div>
+                    <div className="relative group">
+                      <AtSign size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-indigo-400 group-focus-within:text-indigo-300 transition-colors" />
+                      <input 
+                        type="text" 
+                        value={channelHandle}
+                        onChange={(e) => setChannelHandle(e.target.value)}
+                        required
+                        placeholder="@MrBeast or @veritasium"
+                        className="w-full bg-white/[0.02] focus:bg-[#15151c] border border-indigo-500/30 focus:border-indigo-500/60 rounded-xl py-2.5 pl-10 pr-4 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none transition-all"
+                      />
+                    </div>
+                    <p className="text-[10px] font-mono text-zinc-500">
+                      Channel ID & live statistics will be verified automatically via YouTube API.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
+                      Creator / Channel Display Name
+                    </label>
+                    <div className="relative group">
+                      <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-zinc-300 transition-colors" />
+                      <input 
+                        type="text" 
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g. MrBeast (optional, defaults to YouTube name)"
+                        className="w-full bg-white/[0.02] focus:bg-[#15151c] border border-white/[0.08] focus:border-white/20 rounded-xl py-2.5 pl-10 pr-4 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
               {/* Email Input */}
               <div className="space-y-1.5">
                 <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Email Address</label>
@@ -238,7 +287,7 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    placeholder="trader@creatr.exchange"
+                    placeholder="creator@channel.com"
                     className="w-full bg-white/[0.02] focus:bg-[#15151c] border border-white/[0.08] focus:border-white/20 rounded-xl py-2.5 pl-10 pr-4 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none transition-all"
                   />
                 </div>
@@ -267,10 +316,17 @@ export default function Login() {
                 className="w-full mt-2 py-3 rounded-xl bg-white text-black font-semibold text-xs tracking-wide hover:bg-zinc-200 active:scale-[0.99] transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
               >
                 {loading ? (
-                  <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+                    <span>{!isLogin && role === 'CREATOR' ? 'Verifying YouTube Channel...' : 'Processing...'}</span>
+                  </div>
                 ) : (
                   <>
-                    {isLogin ? 'Sign In to Terminal' : 'Create Trading Account'}
+                    {isLogin 
+                      ? 'Sign In to Terminal' 
+                      : role === 'CREATOR' 
+                        ? 'Verify Channel & Create Creator Account' 
+                        : 'Create Trading Account'}
                     <ArrowRight size={14} />
                   </>
                 )}

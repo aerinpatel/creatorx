@@ -2,18 +2,34 @@ import { test, expect } from '@playwright/test';
 
 test.describe('Trading Platform Secondary Market Flow', () => {
   test('Investor A buys from Creator, then sells to Investor B', async ({ request }) => {
-    const uniqueId = Date.now();
+    test.setTimeout(60000);
+    const uniqueId = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     
     // ==========================================
     // STEP 1: CREATOR LAUNCHES IPO
     // ==========================================
     const creatorSignup = await request.post('http://localhost:3000/api/auth/signup', {
-      data: { email: `creator_${uniqueId}@test.com`, password: 'password', role: 'CREATOR' }
+      data: { 
+        email: `creator_${uniqueId}@test.com`, 
+        password: 'password', 
+        role: 'CREATOR',
+        channelHandle: `test_channel_${uniqueId}`,
+        name: `Test Channel ${uniqueId}`
+      }
     });
-    expect(creatorSignup.ok(), 'Creator signup failed').toBeTruthy();
+    expect(creatorSignup.ok(), `Creator signup failed: ${await creatorSignup.text()}`).toBeTruthy();
     
+    const signupData = await creatorSignup.json();
+    const channelId = signupData.user.creatorProfile?.youtubeChannelId || `UC_test_channel_${uniqueId}`;
+
     const ipoResponse = await request.post('http://localhost:3000/api/creators/ipo', {
-      data: { youtubeChannelId: `test_channel_${uniqueId}`, channelName: `Test Channel ${uniqueId}`, valuation: 100000, totalShares: 10000, floatPercent: 30 } // Using exact IPO params
+      data: { 
+        youtubeChannelId: channelId, 
+        channelName: `Test Channel ${uniqueId}`, 
+        valuation: 100000, 
+        totalShares: 10000, 
+        floatPercent: 30 
+      }
     });
     expect(ipoResponse.ok(), `IPO failed: ${await ipoResponse.text()}`).toBeTruthy();
     

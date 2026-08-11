@@ -3,22 +3,22 @@ import Link from 'next/link';
 import prisma from '@/lib/prisma';
 import { verifyToken } from '@/lib/auth';
 import TopNav from '@/components/TopNav';
-import { 
-  TrendingUp, 
-  TrendingDown, 
-  Sparkles, 
-  Activity, 
-  ArrowUpRight, 
-  Layers, 
-  BarChart2, 
-  Clock, 
+import {
+  TrendingUp,
+  TrendingDown,
+  Sparkles,
+  Activity,
+  ArrowUpRight,
+  Layers,
+  BarChart2,
+  Clock,
   Flame,
   LogIn,
   SlidersHorizontal
 } from 'lucide-react';
 
-export default async function MarketPage(props: { 
-  searchParams: Promise<{ sort?: string, search?: string }> 
+export default async function MarketPage(props: {
+  searchParams: Promise<{ sort?: string, search?: string }>
 }) {
   const searchParams = await props.searchParams;
   const sort = searchParams.sort || 'recent';
@@ -29,7 +29,7 @@ export default async function MarketPage(props: {
   let user: any = null;
   let holdingsList: any[] = [];
   let totalValue = 0;
-  
+
   if (token) {
     const payload = verifyToken(token);
     if (payload) {
@@ -55,7 +55,7 @@ export default async function MarketPage(props: {
           const currentPrice = latestTrade ? latestTrade.price.toNumber() : (h.creator.ipoPrice?.toNumber() || 0);
           const value = currentPrice * Number(h.quantity);
           const cost = Number(h.avgBuyPrice) * Number(h.quantity);
-          
+
           totalValue += value;
           const pnl = value - cost;
           const pnlPercent = cost > 0 ? (pnl / cost) * 100 : 0;
@@ -141,23 +141,23 @@ export default async function MarketPage(props: {
     <div className="flex w-full h-full bg-[#08080a] text-zinc-100">
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 border-r border-white/[0.06]">
-        
+
         <TopNav />
 
         {/* Dashboard Body */}
         <div className="flex-1 overflow-y-auto p-8 space-y-8">
-          
+
           {/* Market Hero Telemetry Banner */}
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            
+
             <div className="p-5 rounded-2xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-sm relative overflow-hidden group hover:border-white/[0.12] transition-all">
               <div className="flex items-center justify-between text-zinc-500 text-xs font-mono mb-2">
                 <span>TOTAL MARKET CAP</span>
                 <Activity size={14} className="text-zinc-400" />
               </div>
               <p className="text-2xl font-mono font-bold text-white tracking-tight">
-                ${totalMarketCap > 1000000 
-                  ? (totalMarketCap / 1000000).toFixed(2) + 'M' 
+                ${totalMarketCap > 1000000
+                  ? (totalMarketCap / 1000000).toFixed(2) + 'M'
                   : totalMarketCap.toLocaleString('en-US', { maximumFractionDigits: 0 })}
               </p>
               <p className="text-[11px] font-mono text-zinc-500 mt-1">Across all listed creator equities</p>
@@ -209,33 +209,30 @@ export default async function MarketPage(props: {
             </div>
 
             <div className="flex items-center gap-1.5 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-              <Link 
-                href="?sort=recent" 
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                  sort === 'recent' 
-                    ? 'bg-white/[0.1] text-white shadow-sm' 
+              <Link
+                href="?sort=recent"
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${sort === 'recent'
+                    ? 'bg-white/[0.1] text-white shadow-sm'
                     : 'text-zinc-400 hover:text-zinc-200'
-                }`}
+                  }`}
               >
                 Recent IPOs
               </Link>
-              <Link 
-                href="?sort=gainers" 
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                  sort === 'gainers' 
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+              <Link
+                href="?sort=gainers"
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${sort === 'gainers'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                     : 'text-zinc-400 hover:text-zinc-200'
-                }`}
+                  }`}
               >
                 Top Gainers
               </Link>
-              <Link 
-                href="?sort=score" 
-                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                  sort === 'score' 
-                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30' 
+              <Link
+                href="?sort=score"
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${sort === 'score'
+                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30'
                     : 'text-zinc-400 hover:text-zinc-200'
-                }`}
+                  }`}
               >
                 Highest Valuation Score
               </Link>
@@ -252,10 +249,10 @@ export default async function MarketPage(props: {
             ) : (
               processedCreators.map((creator) => {
                 const formattedPrice = creator.currentPrice.toFixed(2);
-                const formattedMarketCap = creator.marketCap > 1000000 
-                  ? (creator.marketCap / 1000000).toFixed(1) + 'M' 
+                const formattedMarketCap = creator.marketCap > 1000000
+                  ? (creator.marketCap / 1000000).toFixed(1) + 'M'
                   : (creator.marketCap / 1000).toFixed(1) + 'K';
-                
+
                 const isPositive = creator.changePercent >= 0;
                 const isZero = creator.changePercent === 0;
                 const changeStr = `${isPositive && !isZero ? '+' : ''}${creator.changePercent.toFixed(2)}%`;
@@ -265,7 +262,7 @@ export default async function MarketPage(props: {
                 return (
                   <Link href={`/creator/${creator.id}`} key={creator.id} className="group">
                     <div className="p-5 rounded-2xl bg-[#101014] border border-white/[0.07] hover:border-emerald-500/30 hover:bg-[#131318] transition-all duration-200 relative overflow-hidden shadow-lg hover:shadow-2xl flex flex-col justify-between h-full">
-                      
+
                       {/* Top Row: Avatar + Names + Price */}
                       <div>
                         <div className="flex items-start justify-between mb-3.5">
@@ -283,13 +280,12 @@ export default async function MarketPage(props: {
 
                           <div className="text-right">
                             <p className="font-mono font-bold text-lg text-white tracking-tight">${formattedPrice}</p>
-                            <div className={`inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md ${
-                              isZero 
-                                ? 'bg-zinc-800 text-zinc-400 border border-zinc-700/50' 
-                                : isPositive 
-                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
-                                : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                            }`}>
+                            <div className={`inline-flex items-center gap-1 text-[10px] font-mono font-semibold px-2 py-0.5 rounded-md ${isZero
+                                ? 'bg-zinc-800 text-zinc-400 border border-zinc-700/50'
+                                : isPositive
+                                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                  : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                              }`}>
                               {!isZero && (isPositive ? <TrendingUp size={10} /> : <TrendingDown size={10} />)}
                               {changeStr}
                             </div>
@@ -337,7 +333,7 @@ export default async function MarketPage(props: {
 
       {/* Right Sidebar - Live Portfolio & Global Tape */}
       <div className="w-80 shrink-0 bg-[#09090c] flex flex-col border-l border-white/[0.06] hidden xl:flex">
-        
+
         {/* Header */}
         <div className="p-6 border-b border-white/[0.06] flex items-center justify-between">
           <h2 className="font-semibold text-xs font-mono uppercase tracking-wider text-zinc-400">
@@ -355,8 +351,8 @@ export default async function MarketPage(props: {
             </div>
             <p className="text-xs text-zinc-400 font-medium mb-1">Portfolio Locked</p>
             <p className="text-[11px] text-zinc-500 mb-5">Sign in to trade and manage your assets.</p>
-            <Link 
-              href="/login" 
+            <Link
+              href="/login"
               className="w-full py-2.5 bg-white text-black font-semibold text-xs rounded-xl hover:bg-zinc-200 transition-all text-center"
             >
               Sign In
@@ -392,8 +388,8 @@ export default async function MarketPage(props: {
                   <p className="text-xs text-zinc-600 text-center py-4">No active positions</p>
                 ) : (
                   holdingsList.slice(0, 4).map((h) => (
-                    <Link 
-                      href={`/creator/${h.creatorId}`} 
+                    <Link
+                      href={`/creator/${h.creatorId}`}
                       key={h.id}
                       className="flex items-center justify-between p-2.5 rounded-xl hover:bg-white/[0.04] border border-transparent hover:border-white/[0.06] transition-all group"
                     >

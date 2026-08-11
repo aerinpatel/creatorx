@@ -27,10 +27,21 @@ export async function POST(req: NextRequest) {
     const floatSharesCount = Math.floor(Number(totalShares) * (Number(floatPercent) / 100));
     const ownerSharesCount = Number(totalShares) - floatSharesCount;
 
-    // Create the Creator profile and initial Holding atomically
+    // Create or update the Creator profile and initial Holding atomically
     const creator = await prisma.$transaction(async (tx) => {
-      const newCreator = await tx.creator.create({
-        data: {
+      const newCreator = await tx.creator.upsert({
+        where: { userId: payload.userId },
+        update: {
+          channelName,
+          youtubeChannelId,
+          totalShares: BigInt(totalShares),
+          floatShares: BigInt(floatSharesCount),
+          ownerShares: BigInt(ownerSharesCount),
+          ipoPrice: ipoPrice,
+          ipoStatus: 'LISTED',
+          listedAt: new Date(),
+        },
+        create: {
           userId: payload.userId,
           channelName,
           youtubeChannelId,

@@ -21,18 +21,8 @@ export default function Sidebar() {
 
   return (
     <aside className="w-[74px] h-screen bg-[#09090c] border-r border-white/[0.06] flex flex-col items-center py-6 justify-between shrink-0 z-30 select-none">
-      {/* Top: Monogram / Brand */}
-      <div className="flex flex-col items-center gap-7 w-full">
-        <Link href="/market" className="group relative">
-          <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-white/[0.08] to-white/[0.02] border border-white/[0.08] flex items-center justify-center shadow-lg group-hover:border-white/20 transition-all">
-            <span className="font-mono font-black text-sm tracking-tight text-white group-hover:text-emerald-400 transition-colors">
-              CR
-            </span>
-          </div>
-          <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#09090c] animate-pulse-dot" />
-        </Link>
-
-        {/* Navigation Items */}
+      {/* Navigation Items */}
+      <div className="flex flex-col items-center gap-4 w-full">
         <nav className="flex flex-col gap-2.5 items-center w-full px-3">
           <NavItem 
             href="/market" 
@@ -54,11 +44,10 @@ export default function Sidebar() {
           />
           {isCreator && (
             <NavItem 
-              href="/creator-studio" 
+              href="/creator-options" 
               icon={<Video size={19} />} 
-              label="Creator Studio"
-              active={pathname.startsWith('/creator-studio')} 
-              badge="PRO"
+              label="Creator Options"
+              active={pathname.startsWith('/creator-options')} 
             />
           )}
         </nav>
