@@ -63,8 +63,6 @@ model Creator {
   orders        Order[]
   trades        Trade[]
   holdings      Holding[]
-  dividends     Dividend[]
-  announcements Announcement[]
   realizedPnls  RealizedPnL[]
 
   @@index([ipoStatus])
@@ -148,7 +146,6 @@ model Order {
 
   buyTrades  Trade[] @relation("BuyOrder")
   sellTrades Trade[] @relation("SellOrder")
-  announcements Announcement[]
 
   // Supports fast "best price" lookups per creator/side/status
   @@index([creatorId, side, status, price])
@@ -192,52 +189,6 @@ model RealizedPnL {
   realizedAt    DateTime @default(now())
 
   @@index([userId, creatorId])
-}
-
-
-
-// ─────────────────────────────────────────────
-// Creator actions & platform events
-// ─────────────────────────────────────────────
-
-model Dividend {
-  id             String    @id @default(uuid())
-  creatorId      String
-  creator        Creator   @relation(fields: [creatorId], references: [id])
-  totalAmount    Decimal   @db.Decimal(14, 2)
-  perShareAmount Decimal   @db.Decimal(10, 4)
-  recordDate     DateTime // snapshot time used to determine eligible holders
-  paidAt         DateTime?
-  createdAt      DateTime  @default(now())
-
-  announcements Announcement[]
-}
-
-enum AnnouncementType {
-  IPO
-  BUYBACK
-  LIQUIDATION
-  DIVIDEND
-  SCORE_REPORT
-}
-
-// Broadcast-worthy events — the WebSocket layer fans these out to all clients.
-// orderId covers buyback/liquidation (isCreatorAction orders), dividendId
-// covers dividend payouts. Both are optional and mutually exclusive —
-// a SCORE_REPORT announcement has neither.
-model Announcement {
-  id         String           @id @default(uuid())
-  creatorId  String
-  creator    Creator          @relation(fields: [creatorId], references: [id])
-  type       AnnouncementType
-  message    String
-  orderId    String? // set for BUYBACK / LIQUIDATION
-  order      Order?           @relation(fields: [orderId], references: [id])
-  dividendId String? // set for DIVIDEND
-  dividend   Dividend?        @relation(fields: [dividendId], references: [id])
-  createdAt  DateTime         @default(now())
-
-  @@index([creatorId, createdAt])
 }
 
 // ─────────────────────────────────────────────

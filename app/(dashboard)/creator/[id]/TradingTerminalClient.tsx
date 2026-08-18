@@ -32,13 +32,6 @@ interface CreatorScore {
   recordedAt: string;
 }
 
-interface Announcement {
-  id: string;
-  type: string;
-  message: string;
-  createdAt: string;
-}
-
 interface CreatorProps {
   id: string;
   userId: string;
@@ -52,7 +45,6 @@ interface CreatorProps {
   floatShares: string;
   ownerShares: string;
   scores?: CreatorScore[];
-  announcements?: Announcement[];
 }
 
 interface OrderBookSnapshot {
@@ -79,10 +71,10 @@ export default function TradingTerminalClient({
   const [price, setPrice] = useState<string>(creator.currentPrice > 0 ? creator.currentPrice.toString() : '');
   const [quantity, setQuantity] = useState<string>('');
   const [loading, setLoading] = useState(false);
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'warning'; text: string } | null>(null);
 
-  // Terminal Tab State (Chart vs Fundamentals vs Announcements)
-  const [activeTab, setActiveTab] = useState<'chart' | 'fundamentals' | 'announcements'>('chart');
+  // Terminal Tab State (Chart vs Fundamentals)
+  const [activeTab, setActiveTab] = useState<'chart' | 'fundamentals'>('chart');
   const [timeframe, setTimeframe] = useState<'1H' | '24H' | '7D' | '1M' | 'ALL'>('24H');
   const [chartMode, setChartMode] = useState<'area' | 'candles'>('area');
 
@@ -98,6 +90,9 @@ export default function TradingTerminalClient({
 
     socketIo.on('connect', () => {
       socketIo.emit('subscribe', creator.id);
+      if (user?.id) {
+        socketIo.emit('subscribe_user', user.id);
+      }
     });
 
     socketIo.on('depth', (snapshot: OrderBookSnapshot) => {
@@ -116,10 +111,18 @@ export default function TradingTerminalClient({
       }
     });
 
+    socketIo.on('stp_alert', (alertData: { creatorId: string; count: number; message: string }) => {
+      setFeedback({
+        type: 'warning',
+        text: `🛡️ ${alertData.message}`
+      });
+      refreshUser();
+    });
+
     return () => {
       socketIo.disconnect();
     };
-  }, [creator.id]);
+  }, [creator.id, user?.id]);
 
   const handlePlaceOrder = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,9 +145,14 @@ export default function TradingTerminalClient({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to place order');
       
+      let successMsg = `Order submitted: ${side} ${quantity} ${creator.ticker} (${data.executedTrades} immediate matches)`;
+      if (data.stpCancelled && data.stpCancelled > 0) {
+        successMsg += ` • 🛡️ Self-Trade Prevention: ${data.stpCancelled} resting order(s) cancelled & refunded.`;
+      }
+
       setFeedback({
-        type: 'success',
-        text: `Order submitted: ${side} ${quantity} ${creator.ticker} (${data.executedTrades} immediate matches)`
+        type: data.stpCancelled > 0 ? 'warning' : 'success',
+        text: successMsg
       });
       setQuantity('');
       await refreshUser();
@@ -291,16 +299,6 @@ export default function TradingTerminalClient({
               >
                 Channel Fundamentals
               </button>
-              <button
-                onClick={() => setActiveTab('announcements')}
-                className={`px-3 py-1 text-xs font-medium rounded-lg transition-all ${
-                  activeTab === 'announcements' 
-                    ? 'bg-white/[0.08] text-white' 
-                    : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-              >
-                Announcements
-              </button>
             </div>
 
             {activeTab === 'chart' && (
@@ -394,26 +392,6 @@ export default function TradingTerminalClient({
                     </p>
                   )}
                 </div>
-              </div>
-            )}
-
-            {activeTab === 'announcements' && (
-              <div className="space-y-4">
-                {creator.announcements && creator.announcements.length > 0 ? (
-                  creator.announcements.map((a) => (
-                    <div key={a.id} className="p-4 rounded-xl bg-[#101014] border border-white/[0.06]">
-                      <div className="flex items-center justify-between text-[10px] font-mono text-zinc-500 mb-1">
-                        <span className="px-2 py-0.5 rounded bg-white/[0.04] text-zinc-300 font-medium">
-                          {a.type}
-                        </span>
-                        <span>{new Date(a.createdAt).toLocaleString()}</span>
-                      </div>
-                      <p className="text-xs text-zinc-200 mt-2">{a.message}</p>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-zinc-500 text-center py-12">No official announcements published yet.</p>
-                )}
               </div>
             )}
           </div>
@@ -688,9 +666,13 @@ export default function TradingTerminalClient({
                 <div className={`p-3 rounded-xl text-xs font-mono flex items-start gap-2 ${
                   feedback.type === 'success' 
                     ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' 
+                    : feedback.type === 'warning'
+                    ? 'bg-amber-500/10 border border-amber-500/20 text-amber-300'
                     : 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
                 }`}>
-                  {feedback.type === 'success' ? <CheckCircle2 size={15} className="shrink-0 mt-0.5" /> : <AlertCircle size={15} className="shrink-0 mt-0.5" />}
+                  {feedback.type === 'success' && <CheckCircle2 size={15} className="shrink-0 mt-0.5 text-emerald-400" />}
+                  {feedback.type === 'warning' && <ShieldAlert size={15} className="shrink-0 mt-0.5 text-amber-400" />}
+                  {feedback.type === 'error' && <AlertCircle size={15} className="shrink-0 mt-0.5 text-rose-400" />}
                   <span>{feedback.text}</span>
                 </div>
               )}

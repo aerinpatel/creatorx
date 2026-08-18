@@ -44,7 +44,7 @@ app.prepare().then(async () => {
       };
       
       // Load directly into the engine
-      const trades = matchingEngine.placeOrder(engineOrder);
+      const { trades } = matchingEngine.placeOrder(engineOrder);
       if (trades.length > 0) {
         await processTrades(trades, engineOrder.price);
       }
@@ -87,6 +87,12 @@ app.prepare().then(async () => {
       socket.emit('depth', matchingEngine.getOrderBookSnapshot(creatorId));
     });
 
+    // Allow user to subscribe to private account notifications (like STP alerts)
+    socket.on('subscribe_user', (userId: string) => {
+      socket.join(`user:${userId}`);
+      console.log(`Socket ${socket.id} joined private room for user ${userId}`);
+    });
+
     socket.on('unsubscribe', (creatorId: string) => {
       socket.leave(`book:${creatorId}`);
       socket.leave(`trades:${creatorId}`);
@@ -104,6 +110,14 @@ app.prepare().then(async () => {
 
   matchingEngine.on('depth', ({ creatorId, snapshot }) => {
     io.to(`book:${creatorId}`).emit('depth', snapshot);
+  });
+
+  matchingEngine.on('stp_cancelled', ({ userId, creatorId, cancelledOrders }) => {
+    io.to(`user:${userId}`).emit('stp_alert', {
+      creatorId,
+      count: cancelledOrders.length,
+      message: `Self-Trade Prevention Notice: ${cancelledOrders.length} resting order(s) were cancelled & refunded to prevent self-matching.`
+    });
   });
 
   // Start listening

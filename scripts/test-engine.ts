@@ -34,7 +34,7 @@ async function runTests() {
   // Test 2: Full Match
   engine = new MatchingEngine();
   engine.placeOrder(createOrder({ id: 'buy1', side: OrderSide.BUY, price: 100, quantity: 10, remainingQuantity: 10, userId: 'buyer1' }));
-  let trades = engine.placeOrder(createOrder({ id: 'sell1', side: OrderSide.SELL, price: 100, quantity: 10, remainingQuantity: 10, userId: 'seller1' }));
+  let { trades } = engine.placeOrder(createOrder({ id: 'sell1', side: OrderSide.SELL, price: 100, quantity: 10, remainingQuantity: 10, userId: 'seller1' }));
   
   assert.strictEqual(trades.length, 1);
   assert.strictEqual(trades[0].quantity, 10);
@@ -52,7 +52,8 @@ async function runTests() {
   engine.placeOrder(createOrder({ side: OrderSide.SELL, price: 110, quantity: 5, remainingQuantity: 5, userId: 's2' }));
   
   // Market Buy for 12 shares
-  trades = engine.placeOrder(createOrder({ side: OrderSide.BUY, type: OrderType.MARKET, price: null, quantity: 12, remainingQuantity: 12, userId: 'b1' }));
+  const sweepRes = engine.placeOrder(createOrder({ side: OrderSide.BUY, type: OrderType.MARKET, price: null, quantity: 12, remainingQuantity: 12, userId: 'b1' }));
+  trades = sweepRes.trades;
   
   assert.strictEqual(trades.length, 2);
   assert.strictEqual(trades[0].price, 105);
@@ -68,9 +69,10 @@ async function runTests() {
   // Test 4: Self-Trade Prevention
   engine = new MatchingEngine();
   engine.placeOrder(createOrder({ side: OrderSide.BUY, price: 100, quantity: 10, remainingQuantity: 10, userId: 'sameUser' }));
-  trades = engine.placeOrder(createOrder({ side: OrderSide.SELL, price: 100, quantity: 5, remainingQuantity: 5, userId: 'sameUser' }));
+  const stpRes = engine.placeOrder(createOrder({ side: OrderSide.SELL, price: 100, quantity: 5, remainingQuantity: 5, userId: 'sameUser' }));
   
-  assert.strictEqual(trades.length, 0); // No trades should occur
+  assert.strictEqual(stpRes.trades.length, 0); // No trades should occur
+  assert.strictEqual(stpRes.stpCancelledOrders.length, 1); // 1 resting order cancelled via STP
   
   // Test 5: O(1) Cancellation
   engine = new MatchingEngine();
@@ -89,7 +91,8 @@ async function runTests() {
   engine.placeOrder(createOrder({ id: 'rest1', side: OrderSide.BUY, price: 100, quantity: 5, remainingQuantity: 5, userId: 'u1' }));
   engine.placeOrder(createOrder({ id: 'rest2', side: OrderSide.BUY, price: 100, quantity: 5, remainingQuantity: 5, userId: 'u2' }));
   
-  trades = engine.placeOrder(createOrder({ side: OrderSide.SELL, type: OrderType.MARKET, price: null, quantity: 6, remainingQuantity: 6, userId: 'seller' }));
+  const fifoRes = engine.placeOrder(createOrder({ side: OrderSide.SELL, type: OrderType.MARKET, price: null, quantity: 6, remainingQuantity: 6, userId: 'seller' }));
+  trades = fifoRes.trades;
   assert.strictEqual(trades.length, 2);
   assert.strictEqual(trades[0].buyerId, 'u1'); // u1 was first
   assert.strictEqual(trades[0].quantity, 5);
@@ -105,7 +108,13 @@ async function runTests() {
   
   // Market buy for 20, but only 5 available
   const hugeMarketOrder = createOrder({ side: OrderSide.BUY, type: OrderType.MARKET, price: null, quantity: 20, remainingQuantity: 20, userId: 'b1' });
-  trades = engine.placeOrder(hugeMarketOrder);
+  const exhaustionRes = engine.placeOrder(hugeMarketOrder);
+  trades = exhaustionRes.trades;
+  
+  assert.strictEqual(trades.length, 1);
+  assert.strictEqual(trades[0].quantity, 5);
+  assert.strictEqual(hugeMarketOrder.remainingQuantity, 15);
+  assert.strictEqual(hugeMarketOrder.isCancelled, true); // The remainder of market order is auto-cancelled
   
   assert.strictEqual(trades.length, 1);
   assert.strictEqual(trades[0].quantity, 5);

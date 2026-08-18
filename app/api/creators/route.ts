@@ -17,16 +17,29 @@ export async function GET() {
         scores: {
           orderBy: { recordedAt: 'desc' },
           take: 1
+        },
+        trades: {
+          orderBy: [
+            { executedAt: 'desc' },
+            { id: 'desc' }
+          ],
+          take: 1
         }
       }
     });
 
-    // Handle BigInt serialization
-    const serializedCreators = creators.map(c => ({
-      ...c,
-      totalShares: c.totalShares.toString(),
-      floatShares: c.floatShares.toString(),
-    }));
+    // Handle BigInt serialization & last traded currentPrice
+    const serializedCreators = creators.map(c => {
+      const latestTrade = c.trades[0];
+      const currentPrice = latestTrade ? latestTrade.price.toNumber() : (c.ipoPrice?.toNumber() || 0);
+
+      return {
+        ...c,
+        currentPrice,
+        totalShares: c.totalShares.toString(),
+        floatShares: c.floatShares.toString(),
+      };
+    });
 
     return NextResponse.json({ creators: serializedCreators }, { status: 200 });
   } catch (error) {

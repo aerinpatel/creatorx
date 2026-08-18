@@ -41,7 +41,7 @@ export default async function MarketPage(props: {
             include: {
               creator: {
                 include: {
-                  trades: { orderBy: { executedAt: 'desc' }, take: 1 }
+                  trades: { orderBy: [{ executedAt: 'desc' }, { id: 'desc' }], take: 1 }
                 }
               }
             }
@@ -90,7 +90,10 @@ export default async function MarketPage(props: {
         take: 1
       },
       trades: {
-        orderBy: { executedAt: 'desc' },
+        orderBy: [
+          { executedAt: 'desc' },
+          { id: 'desc' }
+        ],
         take: 1
       }
     },
@@ -100,7 +103,10 @@ export default async function MarketPage(props: {
   // Recent 10 Trades across all creators for the right sidebar
   const recentGlobalTrades = await prisma.trade.findMany({
     take: 8,
-    orderBy: { executedAt: 'desc' },
+    orderBy: [
+      { executedAt: 'desc' },
+      { id: 'desc' }
+    ],
     include: {
       creator: { select: { channelName: true } }
     }

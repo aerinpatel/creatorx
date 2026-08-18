@@ -43,7 +43,10 @@ export default async function PortfolioPage() {
           creator: {
             include: {
               trades: {
-                orderBy: { executedAt: 'desc' },
+                orderBy: [
+                  { executedAt: 'desc' },
+                  { id: 'desc' }
+                ],
                 take: 1
               }
             }

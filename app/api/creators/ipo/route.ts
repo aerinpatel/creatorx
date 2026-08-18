@@ -88,6 +88,9 @@ export async function POST(req: NextRequest) {
       });
 
       return { newCreator, floatOrder };
+    }, {
+      maxWait: 15000,
+      timeout: 30000,
     });
     
     // Push the auto-float order into the In-Memory matching engine

@@ -4,8 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { 
   Video, 
-  Sparkles, 
-  Coins, 
   ArrowRight, 
   CheckCircle2, 
   AlertCircle, 
@@ -24,11 +22,6 @@ export default function CreatorOptionsClient({ creatorProfile }: { creatorProfil
   const [floatPercent, setFloatPercent] = useState("20");
   const [ipoLoading, setIpoLoading] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  // Dividend State
-  const [dividendAmount, setDividendAmount] = useState("");
-  const [dividendLoading, setDividendLoading] = useState(false);
-  const [dividendMsg, setDividendMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const numValuation = Number(valuation) || 1;
   const numTotalShares = Number(totalShares) || 1;
@@ -61,31 +54,6 @@ export default function CreatorOptionsClient({ creatorProfile }: { creatorProfil
       setMsg({ type: 'error', text: err.message || "Failed to launch IPO" });
     } finally {
       setIpoLoading(false);
-    }
-  };
-
-  const handleIssueDividend = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setDividendLoading(true);
-    setDividendMsg(null);
-    try {
-      const res = await fetch("/api/creators/dividend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          creatorId: creatorProfile.id,
-          totalAmount: Number(dividendAmount)
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      
-      setDividendMsg({ type: 'success', text: "Dividend distributed to all shareholders!" });
-      setDividendAmount("");
-    } catch (err: any) {
-      setDividendMsg({ type: 'error', text: err.message || "Dividend failed" });
-    } finally {
-      setDividendLoading(false);
     }
   };
 
@@ -276,52 +244,6 @@ export default function CreatorOptionsClient({ creatorProfile }: { creatorProfil
             <span className="text-[10px] font-mono text-zinc-500 uppercase">Public Float</span>
             <p className="text-xl font-mono font-bold text-emerald-400 mt-1">{Number(creatorProfile.floatShares).toLocaleString()}</p>
           </div>
-        </div>
-
-        {/* Action: Dividend Distribution */}
-        <div className="p-6 rounded-2xl bg-[#101014] border border-white/[0.06] shadow-xl">
-          <div className="flex items-center gap-2 mb-2">
-            <Coins size={16} className="text-amber-400" />
-            <h3 className="text-sm font-semibold text-white">Issue Revenue Dividend</h3>
-          </div>
-          <p className="text-xs text-zinc-400 mb-4">
-            Distribute funds proportionally to all active shareholders of your channel.
-          </p>
-
-          <form onSubmit={handleIssueDividend} className="space-y-4 max-w-md">
-            {dividendMsg && (
-              <div className={`p-3 rounded-xl text-xs font-mono flex items-center gap-2 ${
-                dividendMsg.type === 'success' ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border border-rose-500/20 text-rose-400'
-              }`}>
-                {dividendMsg.type === 'success' ? <CheckCircle2 size={15} /> : <AlertCircle size={15} />}
-                <span>{dividendMsg.text}</span>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider mb-1">
-                Total Dividend Amount (USD)
-              </label>
-              <input 
-                type="number" 
-                required 
-                min="1" 
-                step="0.01"
-                placeholder="e.g. 500" 
-                value={dividendAmount} 
-                onChange={e => setDividendAmount(e.target.value)} 
-                className="w-full bg-white/[0.03] border border-white/[0.08] focus:border-white/20 rounded-xl px-4 py-2.5 text-xs font-mono text-white focus:outline-none transition-all" 
-              />
-            </div>
-
-            <button 
-              type="submit" 
-              disabled={dividendLoading}
-              className="py-2.5 px-6 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-xs tracking-wide transition-all disabled:opacity-50 cursor-pointer"
-            >
-              {dividendLoading ? "Distributing..." : "Distribute Dividend"}
-            </button>
-          </form>
         </div>
 
       </div>

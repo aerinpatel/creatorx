@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { 
   BarChart3, 
   Briefcase, 
-  Bell,
+  FileText,
   Layers, 
   LogOut,
   Radio,
@@ -37,10 +37,10 @@ export default function Sidebar() {
             active={pathname.startsWith('/portfolio')} 
           />
           <NavItem 
-            href="/notifications" 
-            icon={<Bell size={19} />} 
-            label="Live Notifications"
-            active={pathname.startsWith('/notifications')} 
+            href="/reports" 
+            icon={<FileText size={19} />} 
+            label="Reports"
+            active={pathname.startsWith('/reports')} 
           />
           {isCreator && (
             <NavItem 

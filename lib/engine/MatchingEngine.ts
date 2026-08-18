@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { OrderBook } from './OrderBook';
-import { Order, Trade } from './types';
+import { Order, Trade, MatchResult } from './types';
 
 export class MatchingEngine extends EventEmitter {
   private orderBooks: Map<string, OrderBook> = new Map();
@@ -19,14 +19,22 @@ export class MatchingEngine extends EventEmitter {
     return orderBook;
   }
 
-  public placeOrder(order: Order): Trade[] {
+  public placeOrder(order: Order): MatchResult {
     const book = this.getOrderBook(order.creatorId);
-    const trades = book.addOrder(order);
+    const { trades, stpCancelledOrders } = book.addOrder(order);
 
     if (trades.length > 0) {
       for (const trade of trades) {
         this.emit('trade', trade);
       }
+    }
+
+    if (stpCancelledOrders && stpCancelledOrders.length > 0) {
+      this.emit('stp_cancelled', {
+        userId: order.userId,
+        creatorId: order.creatorId,
+        cancelledOrders: stpCancelledOrders,
+      });
     }
     
     // Always emit depth update for this creator's book
@@ -35,7 +43,7 @@ export class MatchingEngine extends EventEmitter {
       snapshot: book.getDepth()
     });
 
-    return trades;
+    return { trades, stpCancelledOrders };
   }
 
   public cancelOrder(creatorId: string, orderId: string): boolean {

@@ -58,14 +58,5 @@ export async function calculateCreatorScore(creatorId: string, channelId: string
     }
   });
 
-  // Create an announcement for the score report
-  await prisma.announcement.create({
-    data: {
-      creatorId,
-      type: 'SCORE_REPORT',
-      message: `New valuation score released: ${computedScore.toFixed(2)}`,
-    }
-  });
-
   return scoreRecord;
 }

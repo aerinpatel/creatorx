@@ -13,12 +13,11 @@ export default async function CreatorTradingPage({ params }: { params: Promise<{
         orderBy: { recordedAt: 'desc' },
         take: 5
       },
-      announcements: {
-        orderBy: { createdAt: 'desc' },
-        take: 5
-      },
       trades: {
-        orderBy: { executedAt: 'desc' },
+        orderBy: [
+          { executedAt: 'desc' },
+          { id: 'desc' }
+        ],
         take: 50
       }
     }
@@ -53,12 +52,6 @@ export default async function CreatorTradingPage({ params }: { params: Promise<{
       computedScore: s.computedScore,
       recordedAt: s.recordedAt.toISOString(),
     })),
-    announcements: creator.announcements.map(a => ({
-      id: a.id,
-      type: a.type,
-      message: a.message,
-      createdAt: a.createdAt.toISOString(),
-    }))
   };
 
   const serializedTrades = creator.trades.map(t => ({

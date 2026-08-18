@@ -33,3 +33,8 @@ export interface Trade {
   buyerId: string;
   sellerId: string;
 }
+
+export interface MatchResult {
+  trades: Trade[];
+  stpCancelledOrders: Order[];
+}

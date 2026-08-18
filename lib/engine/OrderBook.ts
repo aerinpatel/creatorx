@@ -1,87 +1,23 @@
-import { Order, OrderSide, OrderType, Trade } from './types';
-import { Heap } from './Heap';
+import { Order, OrderSide, OrderType, Trade, MatchResult } from './types';
+import { MinHeap, MaxHeap, HeapNode } from './Heap';
 import { v4 as uuidv4 } from 'uuid';
 
 /**
- * FIFO Order Queue for a specific Price Level.
- * Guarantees Price-Time priority: orders submitted earlier at the same price
- * are placed at the front of the queue and matched first.
- */
-export class OrderQueue {
-  private queue: Order[] = [];
-
-  public enqueue(order: Order): void {
-    this.queue.push(order);
-  }
-
-  public dequeue(): Order | undefined {
-    return this.queue.shift();
-  }
-
-  public peek(): Order | undefined {
-    return this.queue.length > 0 ? this.queue[0] : undefined;
-  }
-
-  public size(): number {
-    return this.queue.length;
-  }
-
-  public get items(): Order[] {
-    return this.queue;
-  }
-}
-
-/**
- * PriceLevel represents a single unique price node in the Order Book Heap.
- * Each PriceLevel contains a FIFO queue of orders placed at this exact price.
- */
-export class PriceLevel {
-  public price: number;
-  public orderQueue: OrderQueue = new OrderQueue();
-
-  constructor(price: number) {
-    this.price = price;
-  }
-
-  public addOrder(order: Order): void {
-    this.orderQueue.enqueue(order);
-  }
-
-  public getNextOrder(): Order | undefined {
-    return this.orderQueue.peek();
-  }
-
-  public popOrder(): Order | undefined {
-    return this.orderQueue.dequeue();
-  }
-
-  public isEmpty(): boolean {
-    return this.orderQueue.size() === 0;
-  }
-}
-
-/**
- * High-Performance Heap-of-Queues OrderBook.
- * - Bids: Max-Heap of PriceLevels (highest price at root, O(1) peek).
- * - Asks: Min-Heap of PriceLevels (lowest price at root, O(1) peek).
- * - PriceLevel: FIFO Queue of orders at that price level for time priority.
+ * High-Performance OrderBook using LinkedList-backed FIFO Queues in Min/Max Heaps.
+ * - Bids: Max-Heap of PriceLevels (highest price at root, O(1) top/peek).
+ * - Asks: Min-Heap of PriceLevels (lowest price at root, O(1) top/peek).
+ * - Each Price Level contains a true LinkedList FIFO Queue with O(1) push and O(1) pop.
  */
 export class OrderBook {
   public creatorId: string;
-  private bids: Heap<PriceLevel>; // Max-Heap of PriceLevel queues
-  private asks: Heap<PriceLevel>; // Min-Heap of PriceLevel queues
-  private bidPriceLevels: Map<number, PriceLevel> = new Map();
-  private askPriceLevels: Map<number, PriceLevel> = new Map();
-  private orderMap: Map<string, Order> = new Map(); // O(1) lookup & lazy tombstone cancellation
+  private bids: MaxHeap<Order>; // Max-Heap for Buy Orders
+  private asks: MinHeap<Order>; // Min-Heap for Sell Orders
+  private orderMap: Map<string, Order> = new Map(); // O(1) order lookup & lazy tombstone cancellation
 
   constructor(creatorId: string) {
     this.creatorId = creatorId;
-
-    // Bids: Max-Heap (highest price first)
-    this.bids = new Heap<PriceLevel>((a, b) => b.price - a.price);
-
-    // Asks: Min-Heap (lowest price first)
-    this.asks = new Heap<PriceLevel>((a, b) => a.price - b.price);
+    this.bids = new MaxHeap<Order>();
+    this.asks = new MinHeap<Order>();
   }
 
   public getOrder(orderId: string): Order | undefined {
@@ -98,21 +34,29 @@ export class OrderBook {
     return true;
   }
 
-  public addOrder(order: Order): Trade[] {
+  public addOrder(order: Order): MatchResult {
     this.orderMap.set(order.id, order);
 
-    let trades: Trade[] = [];
+    let matchRes: MatchResult = { trades: [], stpCancelledOrders: [] };
     if (order.side === OrderSide.BUY) {
       // Match incoming Buy against Ask Min-Heap
-      trades = this.matchOrder(order, this.asks, this.askPriceLevels, (askPrice) => order.type === OrderType.MARKET || askPrice <= order.price!);
-      if (order.remainingQuantity > 0 && order.type === OrderType.LIMIT) {
-        this.insertOrder(order, this.bids, this.bidPriceLevels);
+      matchRes = this.matchOrder(
+        order, 
+        this.asks, 
+        (askPrice) => order.type === OrderType.MARKET || askPrice <= order.price!
+      );
+      if (order.remainingQuantity > 0 && order.type === OrderType.LIMIT && order.price !== null) {
+        this.bids.push(order.price, order);
       }
     } else {
       // Match incoming Sell against Bid Max-Heap
-      trades = this.matchOrder(order, this.bids, this.bidPriceLevels, (bidPrice) => order.type === OrderType.MARKET || bidPrice >= order.price!);
-      if (order.remainingQuantity > 0 && order.type === OrderType.LIMIT) {
-        this.insertOrder(order, this.asks, this.askPriceLevels);
+      matchRes = this.matchOrder(
+        order, 
+        this.bids, 
+        (bidPrice) => order.type === OrderType.MARKET || bidPrice >= order.price!
+      );
+      if (order.remainingQuantity > 0 && order.type === OrderType.LIMIT && order.price !== null) {
+        this.asks.push(order.price, order);
       }
     }
 
@@ -121,51 +65,41 @@ export class OrderBook {
       order.isCancelled = true;
     }
 
-    return trades;
-  }
-
-  private insertOrder(order: Order, heap: Heap<PriceLevel>, priceLevels: Map<number, PriceLevel>) {
-    if (order.price === null) return;
-    
-    let level = priceLevels.get(order.price);
-    if (!level) {
-      level = new PriceLevel(order.price);
-      priceLevels.set(order.price, level);
-      heap.push(level);
-    }
-    // Enqueue order to the tail of the price level queue (FIFO)
-    level.addOrder(order);
+    return matchRes;
   }
 
   private matchOrder(
     incomingOrder: Order, 
-    oppositeHeap: Heap<PriceLevel>, 
-    oppositePriceLevels: Map<number, PriceLevel>, 
+    oppositeHeap: MinHeap<Order> | MaxHeap<Order>, 
     priceCondition: (price: number) => boolean
-  ): Trade[] {
+  ): MatchResult {
     const trades: Trade[] = [];
+    const stpCancelledOrders: Order[] = [];
+    const baseTime = Date.now();
+    let seq = 0;
 
     while (incomingOrder.remainingQuantity > 0 && oppositeHeap.size() > 0) {
-      const bestLevel = oppositeHeap.peek()!;
+      const bestLevel = oppositeHeap.top()!;
 
-      if (!priceCondition(bestLevel.price)) {
+      if (!priceCondition(bestLevel.key)) {
         break; // No matching price available in the book
       }
 
-      // Iterate through the FIFO queue of resting orders at this best price
-      while (!bestLevel.isEmpty() && incomingOrder.remainingQuantity > 0) {
-        const restingOrder = bestLevel.getNextOrder()!;
+      // Iterate through the LinkedList FIFO queue of resting orders at this best price level
+      while (!bestLevel.queue.isEmpty() && incomingOrder.remainingQuantity > 0) {
+        const restingOrder = bestLevel.queue.peek()!;
 
-        // 1. Skip and prune lazy cancelled tombstones
+        // 1. Skip and prune lazy cancelled tombstones in O(1)
         if (restingOrder.isCancelled) {
-          bestLevel.popOrder();
+          bestLevel.queue.pop();
           continue;
         }
 
         // 2. Self-Trade Prevention: prevent account from matching its own resting order
         if (incomingOrder.userId === restingOrder.userId) {
           restingOrder.isCancelled = true;
-          bestLevel.popOrder();
+          stpCancelledOrders.push(restingOrder);
+          bestLevel.queue.pop();
           continue;
         }
 
@@ -182,44 +116,47 @@ export class OrderBook {
           sellOrderId: incomingOrder.side === OrderSide.SELL ? incomingOrder.id : restingOrder.id,
           buyerId: incomingOrder.side === OrderSide.BUY ? incomingOrder.userId : restingOrder.userId,
           sellerId: incomingOrder.side === OrderSide.SELL ? incomingOrder.userId : restingOrder.userId,
-          price: bestLevel.price, // Maker execution price
+          price: bestLevel.key, // Maker execution price (last popped amount from the min/max heap)
           quantity: tradeQuantity,
-          executedAt: Date.now(),
+          executedAt: baseTime + (seq++),
         };
         trades.push(trade);
 
-        // 4. If resting order is fully filled, pop it from the FIFO queue
+        // 4. If resting order is fully filled, pop it from the LinkedList FIFO queue in O(1)
         if (restingOrder.remainingQuantity === 0) {
-          bestLevel.popOrder();
+          bestLevel.queue.pop();
         }
       }
 
-      // If all orders at this price level are consumed/cancelled, remove the level from heap
-      if (bestLevel.isEmpty()) {
+      // If all orders at this price level are consumed/cancelled, remove the level from heap in O(log K)
+      if (bestLevel.queue.isEmpty()) {
         oppositeHeap.pop();
-        oppositePriceLevels.delete(bestLevel.price);
       }
     }
 
-    return trades;
+    return { trades, stpCancelledOrders };
   }
 
   // Get Top Levels Depth for UI & Charts
   public getDepth(levels: number = 10) {
     return {
-      bids: this.getTopLevels(this.bids, this.bidPriceLevels, levels),
-      asks: this.getTopLevels(this.asks, this.askPriceLevels, levels),
+      bids: this.getTopLevels(this.bids, 'DESC', levels),
+      asks: this.getTopLevels(this.asks, 'ASC', levels),
     };
   }
 
-  private getTopLevels(heap: Heap<PriceLevel>, priceLevels: Map<number, PriceLevel>, limit: number) {
-    return Array.from(priceLevels.values())
-      .map(l => ({
-        price: l.price,
-        quantity: l.orderQueue.items.reduce((sum, o) => sum + (o.isCancelled ? 0 : o.remainingQuantity), 0)
+  private getTopLevels(
+    heap: MinHeap<Order> | MaxHeap<Order>, 
+    sortDirection: 'ASC' | 'DESC', 
+    limit: number
+  ) {
+    return heap.getAllNodes()
+      .map(node => ({
+        price: node.key,
+        quantity: node.queue.toArray().reduce((sum, o) => sum + (o.isCancelled ? 0 : o.remainingQuantity), 0)
       }))
       .filter(l => l.quantity > 0)
-      .sort((a, b) => heap === this.bids ? b.price - a.price : a.price - b.price)
+      .sort((a, b) => sortDirection === 'DESC' ? b.price - a.price : a.price - b.price)
       .slice(0, limit);
   }
 }

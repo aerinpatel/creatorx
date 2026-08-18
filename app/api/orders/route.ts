@@ -3,7 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { getUserFromRequest } from '@/lib/auth';
 import { matchingEngine } from '@/lib/engine/MatchingEngine';
 import { OrderSide, OrderType, Order as EngineOrder } from '@/lib/engine/types';
-import { processTrades } from '@/lib/engine/reconciliation';
+import { processTrades, processSTPCancellations } from '@/lib/engine/reconciliation';
 
 export async function POST(req: NextRequest) {
   try {
@@ -100,22 +100,9 @@ export async function POST(req: NextRequest) {
           isCreatorAction: isCreatorAction,
         },
       });
-
-      // Broadcast the Creator's action to the public feed
-      if (isCreatorAction) {
-        const actionType = side === 'BUY' ? 'BUYBACK' : 'LIQUIDATION';
-        const message = side === 'BUY' 
-          ? `Creator initiated a Buyback of ${quantity} shares at $${price}.` 
-          : `Creator is liquidating ${quantity} shares at $${price}.`;
-
-        await tx.announcement.create({
-          data: {
-            creatorId,
-            type: actionType,
-            message: message,
-          }
-        });
-      }
+    }, {
+      maxWait: 15000,
+      timeout: 30000,
     });
 
     if (!dbOrder) {
@@ -136,28 +123,47 @@ export async function POST(req: NextRequest) {
       createdAt: dbOrder.createdAt.getTime(),
     };
 
-    const trades = matchingEngine.placeOrder(engineOrder);
+    const { trades, stpCancelledOrders } = matchingEngine.placeOrder(engineOrder);
+
+    // Process STP Cancellations (Release DB Escrow & Mark CANCELLED)
+    if (stpCancelledOrders && stpCancelledOrders.length > 0) {
+      try {
+        await processSTPCancellations(stpCancelledOrders);
+      } catch (stpError) {
+        console.error('Critical Error processing STP cancellations:', stpError);
+      }
+    }
 
     // Process Executed Trades (Ledger Reconciliation)
     if (trades.length > 0) {
-      // We process trades in the background to prevent blocking the API response too long,
-      // or we can await it here for immediate consistency. We will await it for simplicity.
       try {
         await processTrades(trades, engineOrder.price);
       } catch (tradeError) {
         console.error('Critical Error processing trades:', tradeError);
-        // Note: In production, you'd push this to a reliable queue (SQS/Kafka) in case of DB failure.
       }
     }
 
-    return NextResponse.json({ message: 'Order placed', orderId: dbOrder.id, executedTrades: trades.length }, { status: 201 });
+    return NextResponse.json({ 
+      message: stpCancelledOrders.length > 0
+        ? `Order placed. Self-Trade Prevention: ${stpCancelledOrders.length} resting order(s) cancelled and refunded.`
+        : 'Order placed', 
+      orderId: dbOrder.id, 
+      executedTrades: trades.length,
+      stpCancelled: stpCancelledOrders.length
+    }, { status: 201 });
 
   } catch (error: any) {
-    if (error.message.includes('Insufficient') || error.message.includes('Position limit exceeded') || error.message.includes('Creator not found')) {
+    if (error.message && (
+      error.message.includes('Insufficient') || 
+      error.message.includes('Position limit exceeded') || 
+      error.message.includes('Creator not found') ||
+      error.message.includes('Limit orders require') ||
+      error.message.includes('Invalid order')
+    )) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
     console.error('Order placement error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 }
 

@@ -1,5 +1,44 @@
 import { prisma } from '@/lib/prisma';
-import { Trade } from './types';
+import { Trade, Order } from './types';
+
+export async function processSTPCancellations(cancelledOrders: Order[]) {
+  for (const order of cancelledOrders) {
+    await prisma.$transaction(async (tx) => {
+      const dbOrder = await tx.order.findUnique({ where: { id: order.id } });
+      if (!dbOrder || dbOrder.status === 'CANCELLED' || dbOrder.status === 'FILLED') return;
+
+      // 1. Mark as CANCELLED in DB
+      await tx.order.update({
+        where: { id: order.id },
+        data: { status: 'CANCELLED' }
+      });
+
+      // 2. Refund locked escrow funds / shares
+      if (dbOrder.side === 'BUY') {
+        const refundAmount = Number(dbOrder.remainingQuantity) * Number(dbOrder.price || 0);
+        if (refundAmount > 0) {
+          await tx.user.update({
+            where: { id: dbOrder.userId },
+            data: { walletBalance: { increment: refundAmount } }
+          });
+        }
+      } else {
+        const holding = await tx.holding.findUnique({
+          where: { userId_creatorId: { userId: dbOrder.userId, creatorId: dbOrder.creatorId } }
+        });
+        if (holding) {
+          await tx.holding.update({
+            where: { id: holding.id },
+            data: { quantity: { increment: dbOrder.remainingQuantity } }
+          });
+        }
+      }
+    }, {
+      maxWait: 15000,
+      timeout: 30000
+    });
+  }
+}
 
 export async function processTrades(trades: Trade[], originalBuyLimitPrice: number | null = null) {
   for (const trade of trades) {

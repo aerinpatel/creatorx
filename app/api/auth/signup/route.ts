@@ -88,6 +88,9 @@ export async function POST(req: NextRequest) {
           ipoStatus: creatorProfile.ipoStatus,
         } : undefined,
       };
+    }, {
+      maxWait: 15000,
+      timeout: 30000,
     });
 
     const token = signToken({ userId: user.id, role: user.role });

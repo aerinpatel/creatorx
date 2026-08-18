@@ -115,7 +115,7 @@ export default function Login() {
             Trade YouTube channels with sub-millisecond execution.
           </h2>
           <p className="text-zinc-400 text-sm leading-relaxed mb-8">
-            Access fractional liquidity, real-time algorithmic valuation based on YouTube Data API metrics, and instant dividend distributions.
+            Access fractional liquidity, real-time algorithmic valuation based on YouTube Data API metrics, and sub-millisecond execution.
           </p>
 
           {/* Micro Telemetry Cards */}
