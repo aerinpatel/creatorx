@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/contexts/AuthContext';
 import { 
-  TrendingUp, 
   ShieldCheck, 
   Zap, 
   Sparkles, 
@@ -15,7 +14,9 @@ import {
   Video,
   LineChart,
   AtSign,
-  User
+  User,
+  Flame,
+  CheckCircle2
 } from 'lucide-react';
 
 export default function Login() {
@@ -27,8 +28,7 @@ export default function Login() {
   const [role, setRole] = useState<'INVESTOR' | 'CREATOR'>('INVESTOR');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
-  const { refreshUser } = useAuth();
+  const [demoLoading, setDemoLoading] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -59,23 +59,35 @@ export default function Login() {
         throw new Error(data.error || `Authentication failed (${res.status})`);
       }
 
-      await refreshUser();
-      
-      const meRes = await fetch('/api/auth/me');
-      if (meRes.ok) {
-        const userData = await meRes.json();
-        if (userData.role === 'CREATOR') {
-          router.push('/creator-options');
-        } else {
-          router.push('/market');
-        }
+      // Hard redirect to ensure fresh server component session cookies
+      if (data.user?.role === 'CREATOR' || role === 'CREATOR') {
+        window.location.href = '/creator-options';
       } else {
-        router.push(role === 'CREATOR' ? '/creator-options' : '/market');
+        window.location.href = '/market';
       }
     } catch (err: any) {
-      setError(err.message);
-    } finally {
+      setError(err.message || 'Authentication error');
       setLoading(false);
+    }
+  };
+
+  const handleDemoLogin = async (demoRole: 'CREATOR' | 'INVESTOR') => {
+    setError('');
+    setDemoLoading(demoRole);
+    try {
+      const res = await fetch('/api/auth/demo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: demoRole }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Demo login failed');
+
+      window.location.href = data.redirectUrl || (demoRole === 'CREATOR' ? '/creator-options' : '/market');
+    } catch (err: any) {
+      setError(err.message || 'Failed to initialize demo login');
+      setDemoLoading(null);
     }
   };
 
@@ -115,7 +127,7 @@ export default function Login() {
             Trade YouTube channels with sub-millisecond execution.
           </h2>
           <p className="text-zinc-400 text-sm leading-relaxed mb-8">
-            Access fractional liquidity, real-time algorithmic valuation based on YouTube Data API metrics, and sub-millisecond execution.
+            Access fractional liquidity, real-time algorithmic valuation based on YouTube Data API metrics, and isolated Worker Thread order matching.
           </p>
 
           {/* Micro Telemetry Cards */}
@@ -125,17 +137,17 @@ export default function Login() {
                 <Zap size={14} className="text-amber-400" />
                 Matching Speed
               </div>
-              <p className="text-lg font-mono font-bold text-white">&lt; 0.8ms</p>
-              <p className="text-[11px] text-zinc-500">In-memory Heap Engine</p>
+              <p className="text-lg font-mono font-bold text-white">&lt; 0.5ms</p>
+              <p className="text-[11px] text-zinc-500">Worker Thread Engine</p>
             </div>
 
             <div className="p-4 rounded-xl bg-white/[0.02] border border-white/[0.06] backdrop-blur-sm">
               <div className="flex items-center gap-2 text-zinc-400 text-xs font-mono mb-1">
                 <LineChart size={14} className="text-emerald-400" />
-                Fundamental Valuation
+                Valuation Engine
               </div>
-              <p className="text-lg font-mono font-bold text-emerald-400">Live API Facts</p>
-              <p className="text-[11px] text-zinc-500">Subscribers, Views & Uploads</p>
+              <p className="text-lg font-mono font-bold text-emerald-400">Live API Score</p>
+              <p className="text-[11px] text-zinc-500">Suggested Price & Float Controls</p>
             </div>
           </div>
         </div>
@@ -150,21 +162,21 @@ export default function Login() {
         </div>
       </div>
 
-      {/* Right Pane - Minimalist Authentication Card */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 relative">
-        <div className="w-full max-w-md">
+      {/* Right Pane - Authentication Card */}
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 relative overflow-y-auto">
+        <div className="w-full max-w-md my-auto">
           
           {/* Form Container */}
           <div className="p-8 rounded-2xl bg-[#101014]/90 border border-white/[0.08] shadow-2xl backdrop-blur-xl relative">
             
             {/* Header Switcher */}
-            <div className="flex items-center justify-between mb-8 pb-6 border-b border-white/[0.06]">
+            <div className="flex items-center justify-between mb-6 pb-6 border-b border-white/[0.06]">
               <div>
                 <h3 className="text-xl font-semibold text-white tracking-tight">
                   {isLogin ? 'Sign In' : 'Create Account'}
                 </h3>
                 <p className="text-xs text-zinc-500 mt-1">
-                  {isLogin ? 'Access your creator equity portfolio' : 'Join the next-generation creator market'}
+                  {isLogin ? 'Access your creator equity portfolio' : 'Join the creator equity exchange'}
                 </p>
               </div>
 
@@ -172,7 +184,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => { setIsLogin(true); setError(''); }}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
                     isLogin ? 'bg-white/[0.1] text-white shadow' : 'text-zinc-500 hover:text-zinc-300'
                   }`}
                 >
@@ -181,7 +193,7 @@ export default function Login() {
                 <button
                   type="button"
                   onClick={() => { setIsLogin(false); setError(''); }}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer ${
                     !isLogin ? 'bg-white/[0.1] text-white shadow' : 'text-zinc-500 hover:text-zinc-300'
                   }`}
                 >
@@ -192,11 +204,41 @@ export default function Login() {
 
             {/* Error Message */}
             {error && (
-              <div className="mb-6 p-3 text-xs text-rose-400 bg-rose-500/[0.08] border border-rose-500/20 rounded-xl flex items-center gap-2">
+              <div className="mb-5 p-3 text-xs text-rose-400 bg-rose-500/[0.08] border border-rose-500/20 rounded-xl flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-                {error}
+                <span>{error}</span>
               </div>
             )}
+
+            {/* Quick 1-Click Demo Login Bar */}
+            <div className="mb-6 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <Flame size={12} className="text-amber-400" /> Quick Instant Login
+                </span>
+                <span className="text-[9px] font-mono text-zinc-500">1-Click Access</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  disabled={demoLoading !== null || loading}
+                  onClick={() => handleDemoLogin('CREATOR')}
+                  className="py-2 px-3 text-[11px] font-mono font-medium rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <Video size={12} />
+                  {demoLoading === 'CREATOR' ? 'Signing in...' : 'Demo Creator'}
+                </button>
+                <button
+                  type="button"
+                  disabled={demoLoading !== null || loading}
+                  onClick={() => handleDemoLogin('INVESTOR')}
+                  className="py-2 px-3 text-[11px] font-mono font-medium rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  <UserCheck size={12} />
+                  {demoLoading === 'INVESTOR' ? 'Signing in...' : 'Demo Investor'}
+                </button>
+              </div>
+            </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               
@@ -208,7 +250,7 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={() => setRole('INVESTOR')}
-                      className={`flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-lg transition-all ${
+                      className={`flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-lg transition-all cursor-pointer ${
                         role === 'INVESTOR' 
                           ? 'bg-white/[0.1] text-white border border-white/[0.1] shadow-sm' 
                           : 'text-zinc-500 hover:text-zinc-300'
@@ -220,7 +262,7 @@ export default function Login() {
                     <button
                       type="button"
                       onClick={() => setRole('CREATOR')}
-                      className={`flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-lg transition-all ${
+                      className={`flex items-center justify-center gap-2 py-2 text-xs font-medium rounded-lg transition-all cursor-pointer ${
                         role === 'CREATOR' 
                           ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 shadow-sm' 
                           : 'text-zinc-500 hover:text-zinc-300'
@@ -239,9 +281,9 @@ export default function Login() {
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between">
                       <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
-                        YouTube Channel Handle
+                        YouTube Channel Handle / URL / ID
                       </label>
-                      <span className="text-[10px] font-mono text-indigo-400">Auto-links Channel ID</span>
+                      <span className="text-[10px] font-mono text-indigo-400">Auto-Scores Channel</span>
                     </div>
                     <div className="relative group">
                       <AtSign size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-indigo-400 group-focus-within:text-indigo-300 transition-colors" />
@@ -250,18 +292,18 @@ export default function Login() {
                         value={channelHandle}
                         onChange={(e) => setChannelHandle(e.target.value)}
                         required
-                        placeholder="@MrBeast or @veritasium"
+                        placeholder="@MrBeast or https://youtube.com/@veritasium"
                         className="w-full bg-white/[0.02] focus:bg-[#15151c] border border-indigo-500/30 focus:border-indigo-500/60 rounded-xl py-2.5 pl-10 pr-4 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none transition-all"
                       />
                     </div>
                     <p className="text-[10px] font-mono text-zinc-500">
-                      Channel ID & live statistics will be verified automatically via YouTube API.
+                      Supports @handle, full channel link, or channel ID.
                     </p>
                   </div>
 
                   <div className="space-y-1.5">
                     <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
-                      Creator / Channel Display Name
+                      Channel Display Name (Optional)
                     </label>
                     <div className="relative group">
                       <User size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-500 group-focus-within:text-zinc-300 transition-colors" />
@@ -269,7 +311,7 @@ export default function Login() {
                         type="text" 
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="e.g. MrBeast (optional, defaults to YouTube name)"
+                        placeholder="Defaults to your YouTube Channel title"
                         className="w-full bg-white/[0.02] focus:bg-[#15151c] border border-white/[0.08] focus:border-white/20 rounded-xl py-2.5 pl-10 pr-4 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none transition-all"
                       />
                     </div>
@@ -287,7 +329,7 @@ export default function Login() {
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
-                    placeholder="creator@channel.com"
+                    placeholder="you@domain.com"
                     className="w-full bg-white/[0.02] focus:bg-[#15151c] border border-white/[0.08] focus:border-white/20 rounded-xl py-2.5 pl-10 pr-4 text-xs font-mono text-zinc-100 placeholder:text-zinc-600 focus:outline-none transition-all"
                   />
                 </div>
@@ -312,13 +354,13 @@ export default function Login() {
               {/* Submit Button */}
               <button 
                 type="submit" 
-                disabled={loading}
+                disabled={loading || demoLoading !== null}
                 className="w-full mt-2 py-3 rounded-xl bg-white text-black font-semibold text-xs tracking-wide hover:bg-zinc-200 active:scale-[0.99] transition-all flex items-center justify-center gap-2 shadow-lg disabled:opacity-50 cursor-pointer"
               >
                 {loading ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
-                    <span>{!isLogin && role === 'CREATOR' ? 'Verifying YouTube Channel...' : 'Processing...'}</span>
+                    <span>{!isLogin && role === 'CREATOR' ? 'Verifying YouTube Channel...' : 'Signing in...'}</span>
                   </div>
                 ) : (
                   <>
@@ -333,10 +375,9 @@ export default function Login() {
               </button>
             </form>
 
-            {/* Quick Demo Info */}
-            <div className="mt-8 pt-6 border-t border-white/[0.06] text-center">
-              <p className="text-[11px] text-zinc-500">
-                Protected by deterministic double-entry ledger & atomic matching.
+            <div className="mt-6 pt-4 border-t border-white/[0.06] text-center">
+              <p className="text-[10px] text-zinc-500">
+                Encrypted via bcrypt and authenticated with secure httpOnly session cookies.
               </p>
             </div>
           </div>

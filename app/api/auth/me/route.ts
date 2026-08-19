@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
-import prisma from '@/lib/prisma';
+import { prisma } from '@/lib/prisma';
 import { getUserFromRequest } from '@/lib/auth';
 import { NextRequest } from 'next/server';
+
+export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   try {
@@ -13,7 +15,7 @@ export async function GET(req: NextRequest) {
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
       include: {
-        creatorProfile: true, // Fetch creator profile if it exists
+        creatorProfile: true,
       }
     });
 
@@ -21,19 +23,29 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
 
-    // Exclude passwordHash
-    const { passwordHash, ...safeUser } = user;
-
-    // Convert BigInts to strings for JSON serialization
-    if (safeUser.creatorProfile) {
-      safeUser.creatorProfile.totalShares = safeUser.creatorProfile.totalShares.toString() as any;
-      safeUser.creatorProfile.floatShares = safeUser.creatorProfile.floatShares.toString() as any;
-      safeUser.creatorProfile.ownerShares = safeUser.creatorProfile.ownerShares.toString() as any;
-    }
+    // Exclude passwordHash and serialize types cleanly
+    const safeUser: any = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      walletBalance: user.walletBalance.toString(),
+      createdAt: user.createdAt.toISOString(),
+      creatorProfile: user.creatorProfile ? {
+        id: user.creatorProfile.id,
+        channelName: user.creatorProfile.channelName,
+        youtubeChannelId: user.creatorProfile.youtubeChannelId,
+        totalShares: user.creatorProfile.totalShares.toString(),
+        floatShares: user.creatorProfile.floatShares.toString(),
+        ownerShares: user.creatorProfile.ownerShares.toString(),
+        ipoStatus: user.creatorProfile.ipoStatus,
+        ipoPrice: user.creatorProfile.ipoPrice ? user.creatorProfile.ipoPrice.toNumber() : null,
+        listedAt: user.creatorProfile.listedAt ? user.creatorProfile.listedAt.toISOString() : null,
+      } : null,
+    };
 
     return NextResponse.json(safeUser);
   } catch (error: any) {
     console.error('Auth check error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 }

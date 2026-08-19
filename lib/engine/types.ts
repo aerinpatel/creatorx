@@ -1,12 +1,14 @@
-export enum OrderSide {
-  BUY = 'BUY',
-  SELL = 'SELL',
-}
+export const OrderSide = {
+  BUY: 'BUY',
+  SELL: 'SELL',
+} as const;
+export type OrderSide = (typeof OrderSide)[keyof typeof OrderSide];
 
-export enum OrderType {
-  LIMIT = 'LIMIT',
-  MARKET = 'MARKET',
-}
+export const OrderType = {
+  LIMIT: 'LIMIT',
+  MARKET: 'MARKET',
+} as const;
+export type OrderType = (typeof OrderType)[keyof typeof OrderType];
 
 export interface Order {
   id: string;

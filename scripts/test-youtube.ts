@@ -1,52 +1,44 @@
-import { google } from 'googleapis';
 import dotenv from 'dotenv';
 import path from 'path';
 
 // Load environment variables manually for the script
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
 
-const youtube = google.youtube({
-  version: 'v3',
-  auth: process.env.YOUTUBE_API_KEY,
-});
+import { getChannelByHandle } from '../lib/youtube';
+import { computeValuationFromStats } from '../lib/scoreEngine';
 
-async function testHandle(handle: string) {
-  console.log(`Testing handle: ${handle}`);
-  try {
-    const res = await youtube.channels.list({
-      part: ['snippet', 'statistics'],
-      forHandle: handle.replace(/^@/, ''),
-    });
-    console.log('Result forHandle without @:', res.data.items?.map(i => ({
-      id: i.id,
-      title: i.snippet?.title,
-      customUrl: i.snippet?.customUrl,
-      subscribers: i.statistics?.subscriberCount
-    })));
-  } catch (err: any) {
-    console.error('Error without @:', err.message);
+async function testChannel(input: string) {
+  console.log(`\n========================================`);
+  console.log(`Testing Input: "${input}"`);
+  console.log(`========================================`);
+  const channel = await getChannelByHandle(input);
+  if (!channel) {
+    console.error(`Failed to fetch channel for input: ${input}`);
+    return;
   }
 
-  try {
-    const res2 = await youtube.channels.list({
-      part: ['snippet', 'statistics'],
-      forHandle: handle.startsWith('@') ? handle : `@${handle}`,
-    });
-    console.log('Result forHandle with @:', res2.data.items?.map(i => ({
-      id: i.id,
-      title: i.snippet?.title,
-      customUrl: i.snippet?.customUrl,
-      subscribers: i.statistics?.subscriberCount
-    })));
-  } catch (err: any) {
-    console.error('Error with @:', err.message);
-  }
+  console.log(`Channel Title:     ${channel.channelName}`);
+  console.log(`Channel ID:        ${channel.channelId}`);
+  console.log(`Subscribers:       ${channel.subscribers.toLocaleString()}`);
+  console.log(`Total Views:       ${channel.totalViews.toLocaleString()}`);
+  console.log(`Video Count:       ${channel.videoCount}`);
+  console.log(`Avatar URL:        ${channel.avatarUrl || 'N/A'}`);
+
+  const valuation = computeValuationFromStats(channel);
+  console.log(`----------------------------------------`);
+  console.log(`Base Score:           ${valuation.computedScore.toLocaleString()}`);
+  console.log(`Suggested Valuation:  $${valuation.suggestedValuation.toLocaleString()}`);
+  console.log(`Default Shares:       ${valuation.defaultShares.toLocaleString()}`);
+  console.log(`Suggested IPO Price:  $${valuation.suggestedPrice.toFixed(2)} / share`);
+  console.log(`Default Public Float: ${valuation.defaultFloatPercent}%`);
 }
 
 async function run() {
-  await testHandle('@MrBeast');
-  await testHandle('veritasium');
+  await testChannel('@MrBeast');
+  await testChannel('veritasium');
+  await testChannel('https://www.youtube.com/@mkbhd');
+  await testChannel('UCX6OQ3DkcsbYNE6H8uQQuVA');
+  await testChannel('test_mock_channel');
 }
 
 run();
-

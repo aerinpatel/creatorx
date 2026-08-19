@@ -20,13 +20,22 @@ export default async function CreatorOptionsPage() {
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
     include: {
-      creatorProfile: true
+      creatorProfile: {
+        include: {
+          scores: {
+            orderBy: { recordedAt: 'desc' },
+            take: 1
+          }
+        }
+      }
     }
   });
 
   if (!user) {
     redirect('/login');
   }
+
+  const latestScore = user.creatorProfile?.scores[0];
 
   const creatorProfile = user.creatorProfile ? {
     id: user.creatorProfile.id,
@@ -36,6 +45,13 @@ export default async function CreatorOptionsPage() {
     ipoPrice: user.creatorProfile.ipoPrice?.toNumber() || 0,
     totalShares: user.creatorProfile.totalShares.toString(),
     floatShares: user.creatorProfile.floatShares.toString(),
+    ownerShares: user.creatorProfile.ownerShares.toString(),
+    latestScore: latestScore ? {
+      subscribers: latestScore.subscribers.toString(),
+      totalViews: latestScore.totalViews.toString(),
+      videoCount: latestScore.videoCount,
+      computedScore: latestScore.computedScore,
+    } : null,
   } : null;
 
   return <CreatorOptionsClient creatorProfile={creatorProfile} />;

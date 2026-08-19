@@ -12,20 +12,24 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized. Only creators can IPO.' }, { status: 403 });
     }
 
-    const { channelName, youtubeChannelId, valuation, totalShares, floatPercent } = await req.json();
+    const { channelName, youtubeChannelId, price, valuation, totalShares, floatPercent } = await req.json();
 
-    if (!channelName || !youtubeChannelId || !valuation || !totalShares || !floatPercent) {
+    if (!channelName || !youtubeChannelId || !totalShares || !floatPercent) {
       return NextResponse.json({ error: 'Missing required IPO fields' }, { status: 400 });
     }
 
-    if (floatPercent <= 0 || floatPercent > 100) {
-      return NextResponse.json({ error: 'Float percent must be between 1 and 100' }, { status: 400 });
-    }
+    const numTotalShares = Math.max(100, Number(totalShares));
+    const numFloatPercent = Math.min(80, Math.max(5, Number(floatPercent)));
 
-    // Mathematical breakdown of the IPO
-    const ipoPrice = Number(valuation) / Number(totalShares);
-    const floatSharesCount = Math.floor(Number(totalShares) * (Number(floatPercent) / 100));
-    const ownerSharesCount = Number(totalShares) - floatSharesCount;
+    // Calculate final IPO stock price
+    const ipoPrice = price 
+      ? Math.max(0.1, Number(price)) 
+      : valuation 
+        ? Math.max(0.1, Number(valuation) / numTotalShares) 
+        : 1.0;
+
+    const floatSharesCount = Math.floor(numTotalShares * (numFloatPercent / 100));
+    const ownerSharesCount = numTotalShares - floatSharesCount;
 
     // Create or update the Creator profile and initial Holding atomically
     const creator = await prisma.$transaction(async (tx) => {
@@ -34,7 +38,7 @@ export async function POST(req: NextRequest) {
         update: {
           channelName,
           youtubeChannelId,
-          totalShares: BigInt(totalShares),
+          totalShares: BigInt(numTotalShares),
           floatShares: BigInt(floatSharesCount),
           ownerShares: BigInt(ownerSharesCount),
           ipoPrice: ipoPrice,
@@ -45,7 +49,7 @@ export async function POST(req: NextRequest) {
           userId: payload.userId,
           channelName,
           youtubeChannelId,
-          totalShares: BigInt(totalShares),
+          totalShares: BigInt(numTotalShares),
           floatShares: BigInt(floatSharesCount),
           ownerShares: BigInt(ownerSharesCount),
           ipoPrice: ipoPrice,
@@ -54,19 +58,26 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      // Grant the creator 100% of the shares initially so they can sell the float into the market
-      await tx.holding.create({
-        data: {
+      // Grant the creator 100% of the shares initially
+      await tx.holding.upsert({
+        where: { userId_creatorId: { userId: payload.userId, creatorId: newCreator.id } },
+        update: {
+          quantity: BigInt(numTotalShares),
+          avgBuyPrice: ipoPrice,
+          lowestBuyPrice: ipoPrice,
+          highestBuyPrice: ipoPrice,
+        },
+        create: {
           userId: payload.userId,
           creatorId: newCreator.id,
-          quantity: BigInt(totalShares),
+          quantity: BigInt(numTotalShares),
           avgBuyPrice: ipoPrice,
           lowestBuyPrice: ipoPrice,
           highestBuyPrice: ipoPrice,
         }
       });
 
-      // Issue 2 Fix: Auto-Float the public shares by placing a massive SELL order from the Creator
+      // Place the public float SELL order into the market
       const floatOrder = await tx.order.create({
         data: {
           userId: payload.userId,
@@ -81,7 +92,7 @@ export async function POST(req: NextRequest) {
         }
       });
 
-      // Deduct the float shares from the holding for escrow immediately
+      // Deduct the float shares from the creator's holding for market escrow
       await tx.holding.update({
         where: { userId_creatorId: { userId: payload.userId, creatorId: newCreator.id } },
         data: { quantity: { decrement: floatSharesCount } }
@@ -93,7 +104,7 @@ export async function POST(req: NextRequest) {
       timeout: 30000,
     });
     
-    // Push the auto-float order into the In-Memory matching engine
+    // Push the float order into the Worker Thread Matching Engine
     const engineOrder: EngineOrder = {
       id: creator.floatOrder.id,
       userId: payload.userId,
@@ -106,11 +117,10 @@ export async function POST(req: NextRequest) {
       isCreatorAction: true,
       createdAt: creator.floatOrder.createdAt.getTime(),
     };
-    matchingEngine.placeOrder(engineOrder);
+    await matchingEngine.placeOrder(engineOrder);
 
-    // or just return a safe response
     return NextResponse.json({ 
-      message: 'IPO successful. Shares are actively floating in the market!', 
+      message: 'IPO successful. Channel shares are now actively trading in the market!', 
       creator: {
         id: creator.newCreator.id,
         channelName: creator.newCreator.channelName,
@@ -126,6 +136,6 @@ export async function POST(req: NextRequest) {
     if (error.code === 'P2002') {
       return NextResponse.json({ error: 'You have already listed a channel or the channel ID is taken' }, { status: 409 });
     }
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 }

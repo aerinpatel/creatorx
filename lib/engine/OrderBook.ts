@@ -1,5 +1,7 @@
-import { Order, OrderSide, OrderType, Trade, MatchResult } from './types';
-import { MinHeap, MaxHeap, HeapNode } from './Heap';
+import { OrderSide, OrderType } from './types';
+import type { Order, Trade, MatchResult } from './types';
+import { MinHeap, MaxHeap } from './Heap';
+import type { HeapNode } from './Heap';
 import { v4 as uuidv4 } from 'uuid';
 
 /**

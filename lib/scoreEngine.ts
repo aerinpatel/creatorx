@@ -1,59 +1,82 @@
 import { prisma } from './prisma';
 import { getChannelStats, YouTubeStats } from './youtube';
 
-const OUTLIER_THRESHOLD = 2.0; // Max 2x jump allowed in a single period
-const MAX_SMOOTHED_JUMP = 1.5; // Cap jump at 1.5x
+export interface ValuationResult {
+  computedScore: number;
+  suggestedValuation: number;
+  suggestedPrice: number;
+  defaultShares: number;
+  defaultFloatPercent: number;
+  subscribers: number;
+  totalViews: number;
+  videoCount: number;
+}
 
+/**
+ * Calculates a simple, transparent fundamental score & suggested IPO share price.
+ *
+ * Formula:
+ * 1. Base Score = (Subs * 0.50) + (Views * 0.01) + (Videos * 50)
+ *    - Subs ($0.50/sub): Long-term audience reach & community brand equity.
+ *    - Views ($0.01/view): Estimated historical AdSense cash-generation power ($10 RPM).
+ *    - Videos ($50/video): Value of the evergreen back-catalog library.
+ *
+ * 2. Suggested Valuation = Math.max(10,000, Base Score * 0.05)
+ *    - 5% multiplier on the cumulative historical economic footprint.
+ *    - Minimum floor of $10,000.
+ *
+ * 3. Suggested IPO Price = Suggested Valuation / 10,000 standard shares (min $1.00)
+ */
+export function computeValuationFromStats(stats: YouTubeStats): ValuationResult {
+  const subscribers = Number(stats.subscribers || 0);
+  const totalViews = Number(stats.totalViews || 0);
+  const videoCount = Number(stats.videoCount || 0);
+
+  // 1. Fundamental Base Score
+  const rawScore = (subscribers * 0.50) + (totalViews * 0.01) + (videoCount * 50);
+  const computedScore = Math.max(10, Number(rawScore.toFixed(2)));
+
+  // 2. Channel Estimated Valuation
+  const suggestedValuation = Math.max(10000, Number((computedScore * 0.05).toFixed(2)));
+
+  // 3. Suggested Share Price based on 10,000 standard shares
+  const defaultShares = 10000;
+  const defaultFloatPercent = 20;
+  const suggestedPrice = Math.max(1.00, Number((suggestedValuation / defaultShares).toFixed(2)));
+
+  return {
+    computedScore,
+    suggestedValuation,
+    suggestedPrice,
+    defaultShares,
+    defaultFloatPercent,
+    subscribers,
+    totalViews,
+    videoCount,
+  };
+}
+
+/**
+ * Pulls latest live channel stats, calculates score, and records a snapshot in DB.
+ */
 export async function calculateCreatorScore(creatorId: string, channelId: string) {
   const stats = await getChannelStats(channelId);
-  
   if (!stats) {
     console.error(`Failed to get stats for channel ${channelId}`);
     return null;
   }
 
-  // Get previous scores for trailing average
-  const previousScores = await prisma.creatorScore.findMany({
-    where: { creatorId },
-    orderBy: { recordedAt: 'desc' },
-    take: 5,
-  });
+  const { computedScore, subscribers, totalViews, videoCount } = computeValuationFromStats(stats);
 
-  let smoothedStats = { ...stats };
-
-  if (previousScores.length > 0) {
-    const avgSubs = previousScores.reduce((sum, s) => sum + Number(s.subscribers), 0) / previousScores.length;
-    const avgViews = previousScores.reduce((sum, s) => sum + Number(s.totalViews), 0) / previousScores.length;
-
-    // Outlier rejection
-    if (avgSubs > 0 && stats.subscribers > avgSubs * OUTLIER_THRESHOLD) {
-      smoothedStats.subscribers = Math.floor(avgSubs * MAX_SMOOTHED_JUMP);
-    }
-    
-    if (avgViews > 0 && stats.totalViews > avgViews * OUTLIER_THRESHOLD) {
-      smoothedStats.totalViews = Math.floor(avgViews * MAX_SMOOTHED_JUMP);
-    }
-  }
-
-  // Calculate upload consistency (mock logic: 1.0 means perfectly consistent)
-  // In a real app, you'd fetch the latest videos and check intervals.
-  const uploadConsistency = 0.95;
-
-  // Base computation formula
-  // Score = (Subs * 0.4) + (Views * 0.01) + (Videos * 100) * Consistency
-  const rawScore = (smoothedStats.subscribers * 0.4) + (smoothedStats.totalViews * 0.01) + (smoothedStats.videoCount * 100);
-  const computedScore = rawScore * uploadConsistency;
-
-  // Save the new fact
   const scoreRecord = await prisma.creatorScore.create({
     data: {
       creatorId,
-      subscribers: BigInt(smoothedStats.subscribers),
-      totalViews: BigInt(smoothedStats.totalViews),
-      totalLikes: BigInt(0), // Requires full video scraping, skipping for v1
-      totalComments: BigInt(0), // Requires full video scraping, skipping for v1
-      videoCount: Number(smoothedStats.videoCount),
-      uploadConsistency: uploadConsistency,
+      subscribers: BigInt(subscribers),
+      totalViews: BigInt(totalViews),
+      totalLikes: BigInt(0),
+      totalComments: BigInt(0),
+      videoCount: videoCount,
+      uploadConsistency: 0.95,
       computedScore: computedScore,
     }
   });

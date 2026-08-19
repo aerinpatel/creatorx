@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '@/lib/prisma';
 import { signToken } from '@/lib/auth';
 import { getChannelByHandle } from '@/lib/youtube';
+import { computeValuationFromStats } from '@/lib/scoreEngine';
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,67 +13,90 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+
     const existingUser = await prisma.user.findUnique({
-      where: { email },
+      where: { email: cleanEmail },
     });
 
     if (existingUser) {
-      return NextResponse.json({ error: 'User already exists' }, { status: 409 });
+      return NextResponse.json({ error: 'User with this email already exists. Please log in.' }, { status: 409 });
     }
 
     const isCreator = role === 'CREATOR';
     let channelInfo = null;
+    let valuation = null;
 
     if (isCreator) {
       if (!channelHandle || !channelHandle.trim()) {
-        return NextResponse.json({ error: 'YouTube channel handle is required for Creator accounts (e.g. @MrBeast)' }, { status: 400 });
+        return NextResponse.json({ error: 'YouTube channel handle or URL is required for Creator accounts (e.g. @MrBeast)' }, { status: 400 });
       }
 
-      // Fetch YouTube channel details and verify via YouTube API
+      // Fast direct YouTube channel details fetch
       channelInfo = await getChannelByHandle(channelHandle);
       if (!channelInfo) {
         return NextResponse.json({ 
-          error: `Could not find YouTube channel for handle "${channelHandle}". Please check the handle and try again.` 
+          error: `Could not verify YouTube channel for "${channelHandle}". Please check the handle or URL.` 
         }, { status: 400 });
       }
 
-      // Check if YouTube channel ID is already linked to an existing creator
+      // Check if YouTube channel ID is already linked to another creator
       const existingCreatorWithChannel = await prisma.creator.findUnique({
         where: { youtubeChannelId: channelInfo.channelId },
       });
 
       if (existingCreatorWithChannel) {
         return NextResponse.json({ 
-          error: `The YouTube channel "${channelInfo.channelName}" (${channelInfo.channelId}) is already linked to another account.` 
+          error: `The YouTube channel "${channelInfo.channelName}" is already registered on Creatr Exchange. Please sign in or use another channel.` 
         }, { status: 409 });
       }
+
+      // Compute initial suggested score and IPO price
+      valuation = computeValuationFromStats(channelInfo);
     }
 
-    const salt = await bcrypt.genSalt(10);
-    const passwordHash = await bcrypt.hash(password, salt);
+    const passwordHash = await bcrypt.hash(password, 10);
 
     // Create user and creator profile atomically
     const user = await prisma.$transaction(async (tx) => {
       const newUser = await tx.user.create({
         data: {
-          email,
+          email: cleanEmail,
           passwordHash,
           role: isCreator ? 'CREATOR' : 'INVESTOR',
         },
       });
 
       let creatorProfile = null;
-      if (isCreator && channelInfo) {
+      if (isCreator && channelInfo && valuation) {
+        const floatCount = Math.floor(valuation.defaultShares * (valuation.defaultFloatPercent / 100));
+        const ownerCount = valuation.defaultShares - floatCount;
+
         creatorProfile = await tx.creator.create({
           data: {
             userId: newUser.id,
             channelName: name || channelName || channelInfo.channelName,
             youtubeChannelId: channelInfo.channelId,
-            totalShares: BigInt(0),
-            floatShares: BigInt(0),
-            ownerShares: BigInt(0),
+            totalShares: BigInt(valuation.defaultShares),
+            floatShares: BigInt(floatCount),
+            ownerShares: BigInt(ownerCount),
             ipoStatus: 'PENDING',
+            ipoPrice: valuation.suggestedPrice,
           },
+        });
+
+        // Save initial creator score snapshot
+        await tx.creatorScore.create({
+          data: {
+            creatorId: creatorProfile.id,
+            subscribers: BigInt(valuation.subscribers),
+            totalViews: BigInt(valuation.totalViews),
+            totalLikes: BigInt(0),
+            totalComments: BigInt(0),
+            videoCount: valuation.videoCount,
+            uploadConsistency: 0.95,
+            computedScore: valuation.computedScore,
+          }
         });
       }
 
@@ -80,17 +104,19 @@ export async function POST(req: NextRequest) {
         id: newUser.id,
         email: newUser.email,
         role: newUser.role,
-        walletBalance: newUser.walletBalance,
+        walletBalance: newUser.walletBalance.toString(),
         creatorProfile: creatorProfile ? {
           id: creatorProfile.id,
           channelName: creatorProfile.channelName,
           youtubeChannelId: creatorProfile.youtubeChannelId,
           ipoStatus: creatorProfile.ipoStatus,
+          suggestedPrice: valuation?.suggestedPrice,
+          suggestedValuation: valuation?.suggestedValuation,
         } : undefined,
       };
     }, {
-      maxWait: 15000,
-      timeout: 30000,
+      maxWait: 5000,
+      timeout: 10000,
     });
 
     const token = signToken({ userId: user.id, role: user.role });
@@ -111,9 +137,8 @@ export async function POST(req: NextRequest) {
     });
 
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Signup error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 }
-

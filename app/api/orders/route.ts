@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
       createdAt: dbOrder.createdAt.getTime(),
     };
 
-    const { trades, stpCancelledOrders } = matchingEngine.placeOrder(engineOrder);
+    const { trades, stpCancelledOrders } = await matchingEngine.placeOrder(engineOrder);
 
     // Process STP Cancellations (Release DB Escrow & Mark CANCELLED)
     if (stpCancelledOrders && stpCancelledOrders.length > 0) {

@@ -11,24 +11,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 });
     }
 
+    const cleanEmail = email.trim().toLowerCase();
+
     const user = await prisma.user.findUnique({
-      where: { email },
+      where: { email: cleanEmail },
+      include: {
+        creatorProfile: true,
+      }
     });
 
     if (!user) {
-      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+      return NextResponse.json({ error: 'No account found with this email. Please check your email or sign up.' }, { status: 401 });
     }
 
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
 
     if (!isValidPassword) {
-      return NextResponse.json({ error: 'Invalid email or password' }, { status: 401 });
+      return NextResponse.json({ error: 'Invalid password. Please try again.' }, { status: 401 });
     }
 
     const token = signToken({ userId: user.id, role: user.role });
 
     const response = NextResponse.json(
-      { message: 'Signin successful', user: { id: user.id, email: user.email, role: user.role, walletBalance: user.walletBalance } },
+      { 
+        message: 'Signin successful', 
+        user: { 
+          id: user.id, 
+          email: user.email, 
+          role: user.role, 
+          walletBalance: user.walletBalance.toString(),
+          creatorProfile: user.creatorProfile ? {
+            id: user.creatorProfile.id,
+            channelName: user.creatorProfile.channelName,
+            youtubeChannelId: user.creatorProfile.youtubeChannelId,
+            ipoStatus: user.creatorProfile.ipoStatus,
+          } : undefined
+        } 
+      },
       { status: 200 }
     );
 
@@ -43,8 +62,8 @@ export async function POST(req: NextRequest) {
     });
 
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Signin error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Internal server error' }, { status: 500 });
   }
 }

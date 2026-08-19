@@ -28,7 +28,7 @@ async function main() {
     };
 
     console.log(`Placing into engine: ${dbOrder.side} ${dbOrder.quantity} @ ${dbOrder.price} for creator ${dbOrder.creatorId}`);
-    const { trades } = matchingEngine.placeOrder(engineOrder);
+    const { trades } = await matchingEngine.placeOrder(engineOrder);
     
     if (trades.length > 0) {
       console.log(`MATCHED ${trades.length} trades! Reconciling in DB...`);

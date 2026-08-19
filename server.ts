@@ -43,8 +43,8 @@ app.prepare().then(async () => {
         createdAt: dbOrder.createdAt.getTime(),
       };
       
-      // Load directly into the engine
-      const { trades } = matchingEngine.placeOrder(engineOrder);
+      // Load directly into the engine (Worker Thread)
+      const { trades } = await matchingEngine.placeOrder(engineOrder);
       if (trades.length > 0) {
         await processTrades(trades, engineOrder.price);
       }
@@ -78,13 +78,14 @@ app.prepare().then(async () => {
     console.log(`Socket connected: ${socket.id}`);
 
     // Allow clients to subscribe to specific creator feeds
-    socket.on('subscribe', (creatorId: string) => {
+    socket.on('subscribe', async (creatorId: string) => {
       socket.join(`book:${creatorId}`);
       socket.join(`trades:${creatorId}`);
       console.log(`Socket ${socket.id} joined rooms for ${creatorId}`);
       
       // Instantly send current depth on subscribe
-      socket.emit('depth', matchingEngine.getOrderBookSnapshot(creatorId));
+      const depth = await matchingEngine.getOrderBookSnapshot(creatorId);
+      socket.emit('depth', depth);
     });
 
     // Allow user to subscribe to private account notifications (like STP alerts)
